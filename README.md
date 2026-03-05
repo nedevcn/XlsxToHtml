@@ -7,6 +7,7 @@ A high-performance, zero-dependency .NET 10 library and CLI for converting Exce
 - No third-party dependencies – only .NET Base Class Library.
 - Streaming XML parsing for low memory usage.
 - Inline CSS styles reflecting cell formatting (fonts, colors, number/date formats; bold, italic, underline, background colors).
+- Advanced number formatting: percent, fractions, conditional sections, and custom format strings are interpreted when possible (including basic color codes and positive/negative sections).
 - Console utility for batch conversions.
 
 ## Usage

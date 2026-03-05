@@ -33,6 +33,15 @@ namespace Nedev.XlsxToHtml.Tests
             Assert.IsTrue(html.Contains("rowspan=\"2\""));
             // numeric cell should be formatted by custom format
             Assert.IsTrue(html.Contains("1,234.57"));
+            // percent cell
+            Assert.IsTrue(html.Contains("12.34%"));
+            // fraction cell approximate
+            Assert.IsTrue(html.Contains("3 14159/100000"));
+            // positive cell is red
+            Assert.IsTrue(html.Contains("color:#FF0000"));
+            // negative cell should turn blue
+            Assert.IsTrue(html.Contains("color:#0000FF"));
+            Assert.IsTrue(html.Contains("-1,234.56"));
         }
 
         private static void CreateMinimalWorkbook(string path)
@@ -86,8 +95,11 @@ namespace Nedev.XlsxToHtml.Tests
             Add("xl/styles.xml",
 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
 "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">\n" +
-"  <numFmts count=\"1\">\n" +
+"  <numFmts count=\"4\">\n" +
 "    <numFmt numFmtId=\"164\" formatCode=\"#,##0.00\"/>\n" +
+"    <numFmt numFmtId=\"165\" formatCode=\"0.00%\"/>\n" +
+"    <numFmt numFmtId=\"166\" formatCode=\"# ?/??\"/>\n" +
+"    <numFmt numFmtId=\"167\" formatCode=\"[Red]#,##0.00;[Blue]-#,##0.00\"/>\n" +
 "  </numFmts>\n" +
 "  <fonts count=\"1\">\n" +
 "    <font><b/><color rgb=\"FFFF0000\"/></font>\n" +
@@ -95,9 +107,12 @@ namespace Nedev.XlsxToHtml.Tests
 "  <fills count=\"1\">\n" +
 "    <fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFFF00\"/></patternFill></fill>\n" +
 "  </fills>\n" +
-"  <cellXfs count=\"2\">\n" +
+"  <cellXfs count=\"5\">\n" +
 "    <xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\"/>\n" +
 "    <xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\"/>\n" +
+"    <xf numFmtId=\"165\" fontId=\"0\" fillId=\"0\"/>\n" +
+"    <xf numFmtId=\"166\" fontId=\"0\" fillId=\"0\"/>\n" +
+"    <xf numFmtId=\"167\" fontId=\"0\" fillId=\"0\"/>\n" +
 "  </cellXfs>\n" +
 "</styleSheet>");
 
@@ -113,6 +128,15 @@ namespace Nedev.XlsxToHtml.Tests
 "    </row>\n" +
 "    <row r=\"3\">\n" +
 "      <c r=\"B3\" t=\"n\" s=\"1\"><v>1234.567</v></c>\n" +
+"    </row>\n" +
+"    <row r=\"4\">\n" +
+"      <c r=\"C4\" t=\"n\" s=\"2\"><v>0.1234</v></c>\n" +
+"    </row>\n" +
+"    <row r=\"5\">\n" +
+"      <c r=\"D5\" t=\"n\" s=\"3\"><v>3.14159</v></c>\n" +
+"    </row>\n" +
+"    <row r=\"6\">\n" +
+"      <c r=\"E6\" t=\"n\" s=\"4\"><v>-1234.56</v></c>\n" +
 "    </row>\n" +
 "  </sheetData>\n" +
 "  <mergeCells>\n" +

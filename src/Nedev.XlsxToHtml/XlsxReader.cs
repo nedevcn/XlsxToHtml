@@ -341,8 +341,10 @@ namespace Nedev.XlsxToHtml
                                 {
                                     // choose section based on value
                                     var fmt = PickSection(style.NumberFormat, d);
-                                    // remove color codes like [Red]
-                                    fmt = StripColor(fmt);
+                                    // remove color codes like [Red] and maybe apply color
+                                    var color = ExtractColor(ref fmt);
+                                    if (style != null && !string.IsNullOrEmpty(color))
+                                        style.FontColor = color;
                                     if (FormatIsDate(fmt))
                                     {
                                         var dt = DateTime.FromOADate(d);
@@ -388,10 +390,30 @@ namespace Nedev.XlsxToHtml
 
         private static string StripColor(string fmt)
         {
-            // remove [Red], [Blue] etc
+            // remove all bracketed expressions
             return System.Text.RegularExpressions.Regex.Replace(fmt, "\[[^\]]+\]", string.Empty);
         }
 
+        private static string ExtractColor(ref string fmt)
+        {
+            // finds a color code in brackets and returns hex or named color
+            var m = System.Text.RegularExpressions.Regex.Match(fmt, "\[([^\]]+)\]");
+            if (m.Success)
+            {
+                var text = m.Groups[1].Value;
+                // simple mapping for common colors
+                string? hex = text.ToLowerInvariant() switch
+                {
+                    "red" => "#FF0000",
+                    "blue" => "#0000FF",
+                    "green" => "#008000",
+                    _ => null
+                };
+                fmt = StripColor(fmt); // remove all bracket parts
+                return hex ?? string.Empty;
+            }
+            return string.Empty;
+        }
         private static string FormatPercent(double d, string fmt)
         {
             // Excel stores percent as value 0.5 -> 50%
