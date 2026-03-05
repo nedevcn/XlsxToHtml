@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Xml;
+using System.Xml.Linq;
 
 namespace Nedev.XlsxToHtml
 {
@@ -34,33 +35,16 @@ namespace Nedev.XlsxToHtml
                 return result;
 
             using var stream = entry.Open();
-            using var reader = XmlReader.Create(stream);
-            while (reader.Read())
+            // load with LINQ to XML for simplicity and correctness
+            var doc = System.Xml.Linq.XDocument.Load(stream);
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            foreach (var si in doc.Root.Elements(ns + "si"))
             {
-                if (reader.NodeType == XmlNodeType.Element && reader.Name == "si")
-                {
-                    result.Add(ReadStringItem(reader));
-                }
+                // concatenate all <t> descendants (covers rich text runs)
+                var text = string.Concat(si.Descendants(ns + "t").Select(t => (string)t));
+                result.Add(text);
             }
-            // debug: dump shared strings so we can inspect whether they were read
             return result;
-
-            static string ReadStringItem(XmlReader r)
-            {
-                var sb = new System.Text.StringBuilder();
-                while (r.Read())
-                {
-                    if (r.NodeType == XmlNodeType.Element && r.Name == "t")
-                    {
-                        sb.Append(r.ReadElementContentAsString());
-                    }
-                    else if (r.NodeType == XmlNodeType.EndElement && r.Name == "si")
-                    {
-                        break;
-                    }
-                }
-                return sb.ToString();
-            }
         }
 
         private static Dictionary<int, CellStyle> ReadStyles(ZipArchive archive)
