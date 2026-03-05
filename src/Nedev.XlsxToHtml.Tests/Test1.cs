@@ -31,6 +31,8 @@ namespace Nedev.XlsxToHtml.Tests
             Assert.IsTrue(html.Contains("background-color:#FFFF00"));
             // mergeCell should cause rowspan
             Assert.IsTrue(html.Contains("rowspan=\"2\""));
+            // numeric cell should be formatted by custom format
+            Assert.IsTrue(html.Contains("1,234.57"));
         }
 
         private static void CreateMinimalWorkbook(string path)
@@ -84,14 +86,18 @@ namespace Nedev.XlsxToHtml.Tests
             Add("xl/styles.xml",
 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
 "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">\n" +
+"  <numFmts count=\"1\">\n" +
+"    <numFmt numFmtId=\"164\" formatCode=\"#,##0.00\"/>\n" +
+"  </numFmts>\n" +
 "  <fonts count=\"1\">\n" +
 "    <font><b/><color rgb=\"FFFF0000\"/></font>\n" +
 "  </fonts>\n" +
 "  <fills count=\"1\">\n" +
 "    <fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFFF00\"/></patternFill></fill>\n" +
 "  </fills>\n" +
-"  <cellXfs count=\"1\">\n" +
+"  <cellXfs count=\"2\">\n" +
 "    <xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\"/>\n" +
+"    <xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\"/>\n" +
 "  </cellXfs>\n" +
 "</styleSheet>");
 
@@ -104,6 +110,9 @@ namespace Nedev.XlsxToHtml.Tests
 "    </row>\n" +
 "    <row r=\"2\">\n" +
 "      <c r=\"A2\" t=\"s\" s=\"0\"><v>0</v></c>\n" +
+"    </row>\n" +
+"    <row r=\"3\">\n" +
+"      <c r=\"B3\" t=\"n\" s=\"1\"><v>1234.567</v></c>\n" +
 "    </row>\n" +
 "  </sheetData>\n" +
 "  <mergeCells>\n" +

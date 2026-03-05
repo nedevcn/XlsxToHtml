@@ -330,12 +330,43 @@ namespace Nedev.XlsxToHtml
                 case CellType.Boolean:
                     return raw == "1" ? "TRUE" : "FALSE";
                 case CellType.Number:
-                    if (style?.NumberFormatId is int id && IsDateFormat(id))
+                    if (double.TryParse(raw, out double d))
                     {
-                        if (double.TryParse(raw, out double oa))
+                        if (style != null)
                         {
-                            var dt = DateTime.FromOADate(oa);
-                            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+                            // custom format string takes priority
+                            if (!string.IsNullOrEmpty(style.NumberFormat))
+                            {
+                                try
+                                {
+                                    // choose section based on value
+                                    var fmt = PickSection(style.NumberFormat, d);
+                                    // remove color codes like [Red]
+                                    fmt = StripColor(fmt);
+                                    if (FormatIsDate(fmt))
+                                    {
+                                        var dt = DateTime.FromOADate(d);
+                                        return dt.ToString("yyyy-MM-dd HH:mm:ss");
+                                    }
+                                    // percent handling
+                                    if (fmt.Contains("%"))
+                                        return FormatPercent(d, fmt);
+                                    // fraction handling
+                                    if (fmt.Contains("?/"))
+                                        return FormatFraction(d, fmt);
+                                    // default numeric
+                                    return d.ToString(fmt);
+                                }
+                                catch
+                                {
+                                    // fallback to raw if format fails
+                                }
+                            }
+                            else if (style.NumberFormatId.HasValue && IsDateFormat(style.NumberFormatId.Value))
+                            {
+                                var dt = DateTime.FromOADate(d);
+                                return dt.ToString("yyyy-MM-dd HH:mm:ss");
+                            }
                         }
                     }
                     return raw;
@@ -344,10 +375,68 @@ namespace Nedev.XlsxToHtml
             }
         }
 
+        private static string PickSection(string fmt, double value)
+        {
+            var parts = fmt.Split(';');
+            if (parts.Length == 1) return fmt;
+            if (parts.Length == 2)
+                return value >= 0 ? parts[0] : parts[1];
+            if (parts.Length == 3)
+                return value > 0 ? parts[0] : value < 0 ? parts[1] : parts[2];
+            return parts[0];
+        }
+
+        private static string StripColor(string fmt)
+        {
+            // remove [Red], [Blue] etc
+            return System.Text.RegularExpressions.Regex.Replace(fmt, "\[[^\]]+\]", string.Empty);
+        }
+
+        private static string FormatPercent(double d, string fmt)
+        {
+            // Excel stores percent as value 0.5 -> 50%
+            double p = d * 100;
+            // strip % from format
+            var f = fmt.Replace("%", string.Empty);
+            try
+            {
+                return p.ToString(f) + "%";
+            }
+            catch
+            {
+                return p.ToString("0.##") + "%";
+            }
+        }
+
+        private static string FormatFraction(double d, string fmt)
+        {
+            // very simple: convert to nearest denominator based on pattern like "# ?/?" or "# ??/??"
+            var match = System.Text.RegularExpressions.Regex.Match(fmt, "(\?+)/(\?+)");
+            if (match.Success)
+            {
+                int denomDigits = match.Groups[2].Value.Length;
+                int denom = (int)Math.Pow(10, denomDigits);
+                int whole = (int)Math.Truncate(d);
+                double frac = Math.Abs(d - whole);
+                int num = (int)Math.Round(frac * denom);
+                if (num == 0) return whole.ToString();
+                return string.Format("{0} {1}/{2}", whole, num, denom);
+            }
+            return d.ToString();
+        }
         private static bool IsDateFormat(int numFmtId)
         {
             // built-in date formats 14-22
             return numFmtId >= 14 && numFmtId <= 22;
+        }
+
+        private static bool FormatIsDate(string fmt)
+        {
+            if (string.IsNullOrEmpty(fmt))
+                return false;
+            var s = fmt.ToLowerInvariant();
+            // very simplistic: if contains date/time tokens
+            return s.Contains("yy") || s.Contains("mm") || s.Contains("dd") || s.Contains("h") || s.Contains("s");
         }
     }
 }
