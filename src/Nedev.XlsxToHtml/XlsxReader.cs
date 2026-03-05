@@ -75,13 +75,21 @@ namespace Nedev.XlsxToHtml
             // temporary lists for fonts and fills
             var fonts = new List<(bool Bold, bool Italic, bool Underline, string? Color)>();
             var fills = new List<string?>();
+            var numFmts = new Dictionary<int, string?>();
 
-            // We need two passes: first collect fonts and fills, then cellXfs
+            // We need two passes: collect numFmts/fonts/fills, then cellXfs
             while (reader.Read())
             {
                 if (reader.NodeType == XmlNodeType.Element)
                 {
-                    if (reader.Name == "font")
+                    if (reader.Name == "numFmt")
+                    {
+                        var idAttr = reader.GetAttribute("numFmtId");
+                        var code = reader.GetAttribute("formatCode");
+                        if (int.TryParse(idAttr, out int id))
+                            numFmts[id] = code;
+                    }
+                    else if (reader.Name == "font")
                     {
                         // parse font element
                         bool bold = false, italic = false, underline = false;
@@ -133,7 +141,11 @@ namespace Nedev.XlsxToHtml
                                 xfIndex++;
                                 var style = new CellStyle();
                                 if (int.TryParse(reader.GetAttribute("numFmtId"), out int nfmt))
+                                {
                                     style.NumberFormatId = nfmt;
+                                    if (numFmts.TryGetValue(nfmt, out var fmt))
+                                        style.NumberFormat = fmt;
+                                }
                                 if (int.TryParse(reader.GetAttribute("fontId"), out int fontId) && fontId >= 0 && fontId < fonts.Count)
                                 {
                                     var f = fonts[fontId];
@@ -193,7 +205,35 @@ namespace Nedev.XlsxToHtml
             {
                 if (reader.NodeType == XmlNodeType.Element)
                 {
-                    if (reader.Name == "row")
+                    if (reader.Name == "mergeCells")
+                    {
+                        // process mergeCell entries inside this container
+                        var depth = reader.Depth;
+                        while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "mergeCells" && reader.Depth == depth))
+                        {
+                            if (reader.NodeType == XmlNodeType.Element && reader.Name == "mergeCell")
+                            {
+                                var refAttr = reader.GetAttribute("ref");
+                                if (!string.IsNullOrEmpty(refAttr))
+                                {
+                                    var parts = refAttr.Split(':');
+                                    if (parts.Length == 2)
+                                    {
+                                        var start = DecodeCellRef(parts[0]);
+                                        var end = DecodeCellRef(parts[1]);
+                                        ws.Merges.Add(new MergeCell
+                                        {
+                                            StartRow = start.row,
+                                            StartCol = start.col,
+                                            EndRow = end.row,
+                                            EndCol = end.col
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (reader.Name == "row")
                     {
                         currentRow = new Row();
                         if (int.TryParse(reader.GetAttribute("r"), out int r))

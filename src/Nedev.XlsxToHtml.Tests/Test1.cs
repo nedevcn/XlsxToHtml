@@ -29,6 +29,8 @@ namespace Nedev.XlsxToHtml.Tests
             // style from fonts/fills should appear
             Assert.IsTrue(html.Contains("font-weight:bold"));
             Assert.IsTrue(html.Contains("background-color:#FFFF00"));
+            // mergeCell should cause rowspan
+            Assert.IsTrue(html.Contains("rowspan=\"2\""));
         }
 
         private static void CreateMinimalWorkbook(string path)
@@ -100,7 +102,13 @@ namespace Nedev.XlsxToHtml.Tests
 "    <row r=\"1\">\n" +
 "      <c r=\"A1\" t=\"s\" s=\"0\"><v>0</v></c>\n" +
 "    </row>\n" +
+"    <row r=\"2\">\n" +
+"      <c r=\"A2\" t=\"s\" s=\"0\"><v>0</v></c>\n" +
+"    </row>\n" +
 "  </sheetData>\n" +
+"  <mergeCells>\n" +
+"    <mergeCell ref=\"A1:A2\"/>\n" +
+"  </mergeCells>\n" +
 "</worksheet>");
         }
     }

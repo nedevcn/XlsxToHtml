@@ -24,9 +24,25 @@ namespace Nedev.XlsxToHtml
                     sb.AppendLine("<tr>");
                     foreach (var cell in row.Cells)
                     {
+                        // skip cells that are covered by a merge and are not top-left
+                        var merge = sheet.Merges.FirstOrDefault(m => m.Covers(row.Number, cell.Column));
+                        if (merge != null && !merge.IsTopLeft(row.Number, cell.Column))
+                            continue;
+
+                        var attrs = new List<string>();
+                        if (merge != null)
+                        {
+                            int rowspan = merge.EndRow - merge.StartRow + 1;
+                            int colspan = merge.EndCol - merge.StartCol + 1;
+                            if (rowspan > 1) attrs.Add($"rowspan=\"{rowspan}\"");
+                            if (colspan > 1) attrs.Add($"colspan=\"{colspan}\"");
+                        }
                         var style = cell.Style?.ToCss();
-                        var styleAttr = string.IsNullOrEmpty(style) ? string.Empty : $" style=\"{style}\"";
-                        sb.AppendLine($"<td{styleAttr}>{Escape(cell.Value)}</td>");
+                        if (!string.IsNullOrEmpty(style))
+                            attrs.Add($"style=\"{style}\"");
+
+                        var attrText = attrs.Count > 0 ? " " + string.Join(" ", attrs) : string.Empty;
+                        sb.AppendLine($"<td{attrText}>{Escape(cell.Value)}</td>");
                     }
                     sb.AppendLine("</tr>");
                 }
