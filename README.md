@@ -10,7 +10,18 @@ A high-performance, zero-dependency .NET 10 library and CLI for converting Exce
 - Advanced number formatting: percent, fractions, conditional sections, and custom format strings are interpreted when possible (including basic color codes, positive/negative sections, and hex color specifications).
 
 ### Custom colors
-A static helper is exposed for named color lookup. Call `ColorHelper.AddOrUpdate("name", "#RRGGBB")` before conversion to register additional mappings (e.g. `"orchid"`).- Console utility for batch conversions.
+A static helper is exposed for named color lookup. Call `ColorHelper.AddOrUpdate("name", "#RRGGBB")` before conversion to register additional mappings (e.g. `"orchid"`).
+
+### Formulas
+If a cell contains a formula (`<f>` element) the HTML `<td>` will receive a `title` attribute containing the formula prefixed with `=`; the displayed value normally remains the cached result.  
+A runtime option allows basic evaluation of formulas (arithmetic, cell refs, ranges, `SUM`, `AVERAGE`):
+
+```csharp
+var writer = new HtmlWriter { EvaluateFormulas = true };
+```
+
+
+- Console utility for batch conversions.
 
 ## Usage
 
@@ -34,7 +45,7 @@ dotnet test
 
 ## Limitations
 
-- Formulas are not evaluated; cached values are used.
+- Formulas are not evaluated by default; set `HtmlWriter.EvaluateFormulas` to `true` for simple expressions.
 - Images/charts and complex features (merged cells, comments) are not supported yet.
 
 ---

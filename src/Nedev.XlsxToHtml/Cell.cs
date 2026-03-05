@@ -19,5 +19,6 @@ namespace Nedev.XlsxToHtml
         public CellType Type { get; set; } = CellType.Unknown;
         public string? Value { get; set; }
         public CellStyle? Style { get; set; }
+        public string? Formula { get; set; }
     }
 }

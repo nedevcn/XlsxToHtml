@@ -4,4 +4,6 @@
     <Project Path="src/Nedev.XlsxToHtml.Tests/Nedev.XlsxToHtml.Tests.csproj" />
     <Project Path="src/Nedev.XlsxToHtml/Nedev.XlsxToHtml.csproj" />
   </Folder>
+  <Project Path="Nedev.FormulaEngine.Tests/Nedev.FormulaEngine.Tests.csproj" />
+  <Project Path="Nedev.FormulaEngine/Nedev.FormulaEngine.csproj" />
 </Solution>

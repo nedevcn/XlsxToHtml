@@ -16,14 +16,49 @@ namespace Nedev.XlsxToHtml.Tests
             File.Delete(tempFile);
             tempFile = tempFile + ".xlsx";
             CreateMinimalWorkbook(tempFile);
+            Console.WriteLine($"Workbook created at {tempFile}");
+            using var za = ZipFile.OpenRead(tempFile);
+            using var log = new StreamWriter("d:\\Project\\FileConverters\\XlsxToHtml\\entries.txt", false);
+            log.WriteLine("workbookPath=" + tempFile);
+            foreach (var e in za.Entries)
+            {
+                log.WriteLine(e.FullName);
+            }
+            log.Flush();
+            // dump sharedStrings content for debugging
+            var ssEntry = za.GetEntry("xl/sharedStrings.xml");
+            if (ssEntry != null)
+            {
+                using var sr = new StreamReader(ssEntry.Open());
+                File.WriteAllText("d:\\Project\\FileConverters\\XlsxToHtml\\sharedstrings.xml", sr.ReadToEnd());
+            }
+            // also dump worksheet XML
+            var shEntry = za.GetEntry("xl/worksheets/sheet1.xml");
+            if (shEntry != null)
+            {
+                using var sr2 = new StreamReader(shEntry.Open());
+                File.WriteAllText("d:\\Project\\FileConverters\\XlsxToHtml\\sheet1.xml", sr2.ReadToEnd());
+            }
 
             var reader = new XlsxReader();
             var wb = reader.Read(tempFile);
             Assert.AreEqual(1, wb.Sheets.Count);
             Assert.AreEqual("Sheet1", wb.Sheets[0].Name);
+            // verify first cell value
+            var first = wb.Sheets[0].Rows[0].Cells[0];
+            // write info to same entries log
+            log.WriteLine($"cell0 type={first.Type} value='{first.Value}'");
+            Assert.AreEqual("Hello", first.Value);
+
+            // ensure numeric cell isn't misclassified as shared string
+            var third = wb.Sheets[0].Rows[2].Cells[0]; // B3 originally
+            Assert.AreEqual(CellType.Number, third.Type);
+            Assert.IsTrue(third.Value.StartsWith("1234"));
 
             var writer = new HtmlWriter();
             string html = writer.Convert(wb);
+            // dump to disk for inspection
+            File.WriteAllText(Path.Combine(Path.GetTempPath(), "debug.html"), html);
             Assert.IsTrue(html.Contains("Hello"));
             Assert.IsTrue(html.Contains("<table"));
             // style from fonts/fills should appear
@@ -45,6 +80,15 @@ namespace Nedev.XlsxToHtml.Tests
             // hex color formatting 00FF00 for positive and FF00FF for negative
             Assert.IsTrue(html.Contains("color:#00FF00"));
             Assert.IsTrue(html.Contains("color:#FF00FF"));
+            // formula should be preserved in title
+            Assert.IsTrue(html.Contains("title=\"=SUM(C4:C5)\""));
+
+            // now evaluate formulas
+            writer.EvaluateFormulas = true;
+            string htmlEval = writer.Convert(wb);
+            // original cached value should be replaced by computed sum of C4:C5 (0.1234)
+            Assert.IsTrue(htmlEval.Contains(">0.1234<"));
+
             // custom named color mapping
             ColorHelper.AddOrUpdate("orchid", "#DA70D6");
             Assert.IsTrue(html.Contains("color:#DA70D6"));
@@ -135,7 +179,7 @@ namespace Nedev.XlsxToHtml.Tests
 "      <c r=\"A2\" t=\"s\" s=\"0\"><v>0</v></c>\n" +
 "    </row>\n" +
 "    <row r=\"3\">\n" +
-"      <c r=\"B3\" t=\"n\" s=\"1\"><v>1234.567</v></c>\n" +
+"      <c r=\"B3\" t=\"n\" s=\"1\" f=\"SUM(C4:C5)\"><v>1234.567</v></c>\n" +
 "    </row>\n" +
 "    <row r=\"4\">\n" +
 "      <c r=\"C4\" t=\"n\" s=\"2\"><v>0.1234</v></c>\n" +

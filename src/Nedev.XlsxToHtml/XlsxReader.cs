@@ -42,6 +42,7 @@ namespace Nedev.XlsxToHtml
                     result.Add(ReadStringItem(reader));
                 }
             }
+            // debug: dump shared strings so we can inspect whether they were read
             return result;
 
             static string ReadStringItem(XmlReader r)
@@ -194,6 +195,7 @@ namespace Nedev.XlsxToHtml
             var path = $"xl/worksheets/sheet{sheetNumber}.xml";
             var entry = archive.GetEntry(path);
             var ws = new Worksheet { Name = sheetName, Index = sheetNumber - 1 };
+            // marker so we can tell whether this version of ReadWorksheet ran
             if (entry == null)
                 return ws;
 
@@ -279,15 +281,37 @@ namespace Nedev.XlsxToHtml
                         // read value element inside <c>
                         if (!reader.IsEmptyElement)
                         {
+                            int startDepth = reader.Depth;
                             while (reader.Read())
                             {
-                                if (reader.NodeType == XmlNodeType.Element && reader.Name == "v")
+    
+                                if (reader.NodeType == XmlNodeType.Element && reader.Name == "f")
                                 {
-                                    var raw = reader.ReadElementContentAsString();
+                                    // formula element - content may span multiple nodes but we only care about the string
+                                    cell.Formula = reader.ReadElementContentAsString();
+                                }
+                                else if (reader.NodeType == XmlNodeType.Element && reader.Name == "v")
+                                {
+                                    // read raw value manually instead of ReadElementContentAsString, so we don't consume </c>
+                                    string raw = string.Empty;
+                                    if (!reader.IsEmptyElement)
+                                    {
+                                        // move to the text inside <v>
+                                        if (reader.Read() && (reader.NodeType == XmlNodeType.Text || reader.NodeType == XmlNodeType.Whitespace || reader.NodeType == XmlNodeType.SignificantWhitespace))
+                                        {
+                                            raw = reader.Value;
+                                        }
+                                        // after reading text we should be positioned on the text node; advance until we hit the end of <v>
+                                        while (reader.NodeType != XmlNodeType.EndElement || reader.Name != "v")
+                                        {
+                                            if (!reader.Read()) break;
+                                        }
+                                    }
                                     cell.Value = InterpretValue(raw, cell.Type, sharedStrings, cell.Style);
                                 }
-                                else if (reader.NodeType == XmlNodeType.EndElement && reader.Name == "c")
+                                else if (reader.NodeType == XmlNodeType.EndElement && reader.Depth == startDepth)
                                 {
+                                    // reached closing </c>; break out so outer loop can continue normally
                                     break;
                                 }
                             }
@@ -326,7 +350,7 @@ namespace Nedev.XlsxToHtml
                 case CellType.SharedString:
                     if (int.TryParse(raw, out int si) && si >= 0 && si < shared.Count)
                         return shared[si];
-                    return string.Empty;
+                    return raw;
                 case CellType.Boolean:
                     return raw == "1" ? "TRUE" : "FALSE";
                 case CellType.Number:
@@ -391,13 +415,13 @@ namespace Nedev.XlsxToHtml
         private static string StripColor(string fmt)
         {
             // remove all bracketed expressions
-            return System.Text.RegularExpressions.Regex.Replace(fmt, "\[[^\]]+\]", string.Empty);
+            return System.Text.RegularExpressions.Regex.Replace(fmt, @"\[[^\]]+\]", string.Empty);
         }
 
         private static string ExtractColor(ref string fmt)
         {
             // finds a color code in brackets and returns hex or named color
-            var m = System.Text.RegularExpressions.Regex.Match(fmt, "\[([^\]]+)\]");
+            var m = System.Text.RegularExpressions.Regex.Match(fmt, @"\[([^\]]+)\]");
             if (m.Success)
             {
                 var text = m.Groups[1].Value.Trim();
@@ -438,7 +462,7 @@ namespace Nedev.XlsxToHtml
         private static string FormatFraction(double d, string fmt)
         {
             // very simple: convert to nearest denominator based on pattern like "# ?/?" or "# ??/??"
-            var match = System.Text.RegularExpressions.Regex.Match(fmt, "(\?+)/(\?+)");
+            var match = System.Text.RegularExpressions.Regex.Match(fmt, @"(\?+)/(\?+)");
             if (match.Success)
             {
                 int denomDigits = match.Groups[2].Value.Length;

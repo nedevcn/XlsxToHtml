@@ -6,6 +6,12 @@ namespace Nedev.XlsxToHtml
 {
     public class HtmlWriter : IHtmlWriter
     {
+        /// <summary>
+        /// When true, formulas will be evaluated using a simple built-in engine; the result
+        /// replaces the cached value in the output HTML. Default is false.
+        /// </summary>
+        public bool EvaluateFormulas { get; set; }
+
         public void Write(Workbook workbook, TextWriter output)
         {
             if (workbook == null) throw new ArgumentNullException(nameof(workbook));
@@ -40,9 +46,18 @@ namespace Nedev.XlsxToHtml
                         var style = cell.Style?.ToCss();
                         if (!string.IsNullOrEmpty(style))
                             attrs.Add($"style=\"{style}\"");
+                        if (!string.IsNullOrEmpty(cell.Formula))
+                            attrs.Add($"title=\"={Escape(cell.Formula)}\"");
 
                         var attrText = attrs.Count > 0 ? " " + string.Join(" ", attrs) : string.Empty;
-                        sb.AppendLine($"<td{attrText}>{Escape(cell.Value)}</td>");
+                        // decide display value: cached or evaluated
+                        var displayValue = cell.Value;
+                        if (EvaluateFormulas && !string.IsNullOrEmpty(cell.Formula))
+                        {
+                            var eval = FormulaEvaluator.Evaluate(cell.Formula, sheet);
+                            displayValue = eval;
+                        }
+                        sb.AppendLine($"<td{attrText}>{Escape(displayValue)}</td>");
                     }
                     sb.AppendLine("</tr>");
                 }
