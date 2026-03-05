@@ -45,6 +45,9 @@ namespace Nedev.XlsxToHtml.Tests
             // hex color formatting 00FF00 for positive and FF00FF for negative
             Assert.IsTrue(html.Contains("color:#00FF00"));
             Assert.IsTrue(html.Contains("color:#FF00FF"));
+            // custom named color mapping
+            ColorHelper.AddOrUpdate("orchid", "#DA70D6");
+            Assert.IsTrue(html.Contains("color:#DA70D6"));
         }
 
         private static void CreateMinimalWorkbook(string path)
@@ -145,6 +148,9 @@ namespace Nedev.XlsxToHtml.Tests
 "    </row>\n" +
 "    <row r=\"7\">\n" +
 "      <c r=\"F7\" t=\"n\" s=\"5\"><v>789</v></c>\n" +
+"    </row>\n" +
+"    <row r=\"8\">\n" +
+"      <c r=\"G8\" t=\"n\" s=\"6\"><v>1</v></c>\n" +
 "    </row>\n" +
 "  </sheetData>\n" +
 "  <mergeCells>\n" +

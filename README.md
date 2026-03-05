@@ -8,7 +8,9 @@ A high-performance, zero-dependency .NET 10 library and CLI for converting Exce
 - Streaming XML parsing for low memory usage.
 - Inline CSS styles reflecting cell formatting (fonts, colors, number/date formats; bold, italic, underline, background colors).
 - Advanced number formatting: percent, fractions, conditional sections, and custom format strings are interpreted when possible (including basic color codes, positive/negative sections, and hex color specifications).
-- Console utility for batch conversions.
+
+### Custom colors
+A static helper is exposed for named color lookup. Call `ColorHelper.AddOrUpdate("name", "#RRGGBB")` before conversion to register additional mappings (e.g. `"orchid"`).- Console utility for batch conversions.
 
 ## Usage
 

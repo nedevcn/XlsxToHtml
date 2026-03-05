@@ -25,3 +25,5 @@ TestResults/
 
 # Include any local config
 *.local
+
+/tests
