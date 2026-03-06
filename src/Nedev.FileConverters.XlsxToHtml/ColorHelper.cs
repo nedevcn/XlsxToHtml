@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace Nedev.XlsxToHtml
+namespace Nedev.FileConverters.XlsxToHtml
 {
     public static class ColorHelper
     {

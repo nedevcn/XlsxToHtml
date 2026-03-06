@@ -1,11 +1,13 @@
 ﻿using System;
 using System.IO;
-using Nedev.XlsxToHtml;
+using Nedev.FileConverters.XlsxToHtml;
+using Nedev.FileConverters.Core;
+using Nedev.FileConverters;
 
 if (args.Length < 1 || args.Length > 2)
 {
-    Console.WriteLine("Usage: dotnet run --project src/Nedev.XlsxToHtml.Cli -- <input.xlsx> [output.html]");
-    Console.WriteLine("       dotnet run --project src/Nedev.XlsxToHtml.Cli -- --dump-strings <input.xlsx>");
+    Console.WriteLine("Usage: dotnet run --project src/Nedev.FileConverters.XlsxToHtml.Cli -- <input.xlsx> [output.html]");
+    Console.WriteLine("       dotnet run --project src/Nedev.FileConverters.XlsxToHtml.Cli -- --dump-strings <input.xlsx>");
     return;
 }
 
@@ -66,18 +68,17 @@ if (!File.Exists(input))
 try
 {
     var sw = System.Diagnostics.Stopwatch.StartNew();
-    var reader = new XlsxReader();
-    var workbook = reader.Read(input);
-    var writer = new HtmlWriter();
+    // use the Core converter infrastructure; it will discover our XlsxToHtmlConverter
+    using var inStream = File.OpenRead(input);
+    using var outStream = Converter.Convert(inStream, "xlsx", "html");
     if (string.IsNullOrEmpty(output))
     {
-        // write to stdout
-        writer.Write(workbook, Console.Out);
+        outStream.CopyTo(Console.OpenStandardOutput());
     }
     else
     {
-        using var fs = new StreamWriter(output, false, System.Text.Encoding.UTF8);
-        writer.Write(workbook, fs);
+        using var fs = new FileStream(output, FileMode.Create, FileAccess.Write);
+        outStream.CopyTo(fs);
     }
     sw.Stop();
     Console.Error.WriteLine($"Converted in {sw.ElapsedMilliseconds} ms");

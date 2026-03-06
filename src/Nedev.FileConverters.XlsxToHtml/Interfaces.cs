@@ -1,4 +1,4 @@
-namespace Nedev.XlsxToHtml
+namespace Nedev.FileConverters.XlsxToHtml
 {
     public interface IXlsxReader
     {

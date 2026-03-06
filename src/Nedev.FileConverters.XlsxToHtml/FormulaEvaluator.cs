@@ -3,7 +3,7 @@ using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace Nedev.XlsxToHtml
+namespace Nedev.FileConverters.XlsxToHtml
 {
     public static class FormulaEvaluator
     {

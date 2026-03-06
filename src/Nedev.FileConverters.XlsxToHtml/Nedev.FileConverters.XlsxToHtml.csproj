@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- multi-target for both .NET 8.0 and .NET Standard 2.1 -->
+    <TargetFrameworks>net8.0;netstandard2.1</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Nedev.FileConverters.XlsxToHtml</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Nedev</Authors>
+    <Company>Nedev</Company>
+    <Product>Nedev.FileConverters.XlsxToHtml</Product>
+    <Description>High-performance converter from Excel (XLSX) to HTML with .NET and NuGet integration.</Description>
+    <PackageTags>xlsx html converter fileconverters</PackageTags>
+    <RepositoryUrl>https://github.com/nedevcn/Nedev.FileConverters.XlsxToHtml</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nedev.FileConverters.Core" Version="0.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- include README.md in package root so NuGet Readme works -->
+    <None Include="README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+</Project>

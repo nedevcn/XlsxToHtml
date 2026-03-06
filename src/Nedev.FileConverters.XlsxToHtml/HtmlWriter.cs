@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace Nedev.XlsxToHtml
+namespace Nedev.FileConverters.XlsxToHtml
 {
     public class HtmlWriter : IHtmlWriter
     {

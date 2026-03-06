@@ -5,14 +5,26 @@ using System.IO.Compression;
 using System.Xml;
 using System.Xml.Linq;
 
-namespace Nedev.XlsxToHtml
+namespace Nedev.FileConverters.XlsxToHtml
 {
     public class XlsxReader : IXlsxReader
     {
         public Workbook Read(string path)
         {
-            var workbook = new Workbook();
             using var archive = ZipFile.OpenRead(path);
+            return ReadArchive(archive);
+        }
+
+        public Workbook Read(Stream stream)
+        {
+            // allow stream to be used (e.g. coming from package infrastructure)
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            return ReadArchive(archive);
+        }
+
+        private static Workbook ReadArchive(ZipArchive archive)
+        {
+            var workbook = new Workbook();
 
             var sharedStrings = ReadSharedStrings(archive);
             var styles = ReadStyles(archive);
