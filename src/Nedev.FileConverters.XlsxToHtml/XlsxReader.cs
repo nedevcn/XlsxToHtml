@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -22,21 +24,141 @@ namespace Nedev.FileConverters.XlsxToHtml
             return ReadArchive(archive);
         }
 
-        private static Workbook ReadArchive(ZipArchive archive)
+        public async Task<Workbook> ReadAsync(string path, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            // Open file stream asynchronously
+            await using var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
+            return await ReadAsync(fileStream, cancellationToken);
+        }
+
+        public async Task<Workbook> ReadAsync(Stream stream, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            // For ZipArchive, we need to read into memory first as ZipArchive doesn't support async well
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, cancellationToken);
+            ms.Position = 0;
+            
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            using var archive = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: true);
+            
+            // Run the synchronous read on a background thread
+            return await Task.Run(() => ReadArchive(archive, cancellationToken), cancellationToken);
+        }
+
+        private static Workbook ReadArchive(ZipArchive archive, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            
             var workbook = new Workbook();
 
             var sharedStrings = ReadSharedStrings(archive);
+            cancellationToken.ThrowIfCancellationRequested();
+            
             var styles = ReadStyles(archive);
+            cancellationToken.ThrowIfCancellationRequested();
+            
             var sheetNames = ReadSheetNames(archive);
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            var hyperlinks = ReadHyperlinks(archive);
+            cancellationToken.ThrowIfCancellationRequested();
 
             for (int i = 0; i < sheetNames.Count; i++)
             {
-                var sheet = ReadWorksheet(archive, i + 1, sheetNames[i], sharedStrings, styles);
+                cancellationToken.ThrowIfCancellationRequested();
+                
+                var sheetHyperlinks = hyperlinks.TryGetValue(i + 1, out var sheetLinks) ? sheetLinks : new Dictionary<string, Hyperlink>();
+                var sheet = ReadWorksheet(archive, i + 1, sheetNames[i], sharedStrings, styles, sheetHyperlinks);
                 workbook.Sheets.Add(sheet);
             }
 
             return workbook;
+        }
+
+        private static Dictionary<int, Dictionary<string, Hyperlink>> ReadHyperlinks(ZipArchive archive)
+        {
+            var result = new Dictionary<int, Dictionary<string, Hyperlink>>();
+            
+            // Read workbook relationships to find hyperlink targets
+            var relsEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
+            var hyperlinkTargets = new Dictionary<string, string>();
+            
+            if (relsEntry != null)
+            {
+                using var relsStream = relsEntry.Open();
+                using var relsReader = XmlReader.Create(relsStream);
+                while (relsReader.Read())
+                {
+                    if (relsReader.NodeType == XmlNodeType.Element && relsReader.Name == "Relationship")
+                    {
+                        var id = relsReader.GetAttribute("Id");
+                        var type = relsReader.GetAttribute("Type");
+                        var target = relsReader.GetAttribute("Target");
+                        
+                        if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(target) && 
+                            type != null && type.Contains("hyperlink"))
+                        {
+                            hyperlinkTargets[id] = target;
+                        }
+                    }
+                }
+            }
+            
+            // Read hyperlinks from each worksheet
+            for (int sheetNum = 1; ; sheetNum++)
+            {
+                var entry = archive.GetEntry($"xl/worksheets/sheet{sheetNum}.xml");
+                if (entry == null) break;
+                
+                var sheetHyperlinks = new Dictionary<string, Hyperlink>();
+                using var stream = entry.Open();
+                using var reader = XmlReader.Create(stream);
+                
+                while (reader.Read())
+                {
+                    if (reader.NodeType == XmlNodeType.Element && reader.Name == "hyperlink")
+                    {
+                        var cellRef = reader.GetAttribute("ref");
+                        var relId = reader.GetAttribute("r:id");
+                        var tooltip = reader.GetAttribute("tooltip");
+                        var display = reader.GetAttribute("display");
+                        
+                        if (!string.IsNullOrEmpty(cellRef))
+                        {
+                            var hyperlink = new Hyperlink
+                            {
+                                Tooltip = tooltip,
+                                DisplayText = display
+                            };
+                            
+                            // Try to get URL from relationships
+                            if (!string.IsNullOrEmpty(relId) && hyperlinkTargets.TryGetValue(relId, out var url))
+                            {
+                                hyperlink.Url = url;
+                            }
+                            else
+                            {
+                                // External link stored directly
+                                hyperlink.Url = reader.GetAttribute("location");
+                            }
+                            
+                            sheetHyperlinks[cellRef] = hyperlink;
+                        }
+                    }
+                }
+                
+                if (sheetHyperlinks.Count > 0)
+                {
+                    result[sheetNum] = sheetHyperlinks;
+                }
+            }
+            
+            return result;
         }
 
         private static List<string> ReadSharedStrings(ZipArchive archive)
@@ -426,7 +548,7 @@ namespace Nedev.FileConverters.XlsxToHtml
         }
 
         private static Worksheet ReadWorksheet(ZipArchive archive, int sheetNumber, string sheetName,
-            List<string> sharedStrings, Dictionary<int, CellStyle> styles)
+            List<string> sharedStrings, Dictionary<int, CellStyle> styles, Dictionary<string, Hyperlink> hyperlinks)
         {
             var path = $"xl/worksheets/sheet{sheetNumber}.xml";
             var entry = archive.GetEntry(path);
@@ -583,6 +705,12 @@ namespace Nedev.FileConverters.XlsxToHtml
                                     break;
                                 }
                             }
+                        }
+
+                        // Associate hyperlink if present
+                        if (!string.IsNullOrEmpty(rref) && hyperlinks.TryGetValue(rref, out var hyperlink))
+                        {
+                            cell.Hyperlink = hyperlink;
                         }
 
                         currentRow.Cells.Add(cell);

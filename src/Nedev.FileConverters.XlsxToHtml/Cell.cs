@@ -12,6 +12,13 @@ namespace Nedev.FileConverters.XlsxToHtml
         Formula // we'll emit cached value
     }
 
+    public class Hyperlink
+    {
+        public string? Url { get; set; }
+        public string? Tooltip { get; set; }
+        public string? DisplayText { get; set; }
+    }
+
     public class Cell
     {
         public int Row { get; set; }
@@ -20,5 +27,6 @@ namespace Nedev.FileConverters.XlsxToHtml
         public string? Value { get; set; }
         public CellStyle? Style { get; set; }
         public string? Formula { get; set; }
+        public Hyperlink? Hyperlink { get; set; }
     }
 }

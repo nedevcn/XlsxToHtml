@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Nedev.FileConverters.XlsxToHtml
 {
@@ -117,7 +119,21 @@ namespace Nedev.FileConverters.XlsxToHtml
                             var eval = FormulaEvaluator.Evaluate(cell.Formula, sheet);
                             displayValue = eval;
                         }
-                        sb.AppendLine($"<td{attrText}>{Escape(displayValue)}</td>");
+                        
+                        // Render cell with optional hyperlink
+                        if (cell.Hyperlink != null && !string.IsNullOrEmpty(cell.Hyperlink.Url))
+                        {
+                            var linkAttrs = new List<string>();
+                            linkAttrs.Add($"href=\"{Escape(cell.Hyperlink.Url)}\"");
+                            if (!string.IsNullOrEmpty(cell.Hyperlink.Tooltip))
+                                linkAttrs.Add($"title=\"{Escape(cell.Hyperlink.Tooltip)}\"");
+                            var linkAttrText = " " + string.Join(" ", linkAttrs);
+                            sb.AppendLine($"<td{attrText}><a{linkAttrText}>{Escape(displayValue)}</a></td>");
+                        }
+                        else
+                        {
+                            sb.AppendLine($"<td{attrText}>{Escape(displayValue)}</td>");
+                        }
                     }
                     sb.AppendLine("</tr>");
                 }
@@ -132,6 +148,26 @@ namespace Nedev.FileConverters.XlsxToHtml
         {
             using var sw = new StringWriter();
             Write(workbook, sw);
+            return sw.ToString();
+        }
+
+        public async Task WriteAsync(Workbook workbook, TextWriter output, CancellationToken cancellationToken = default)
+        {
+            if (workbook == null) throw new ArgumentNullException(nameof(workbook));
+            if (output == null) throw new ArgumentNullException(nameof(output));
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Run the synchronous write on a background thread
+            await Task.Run(() => Write(workbook, output), cancellationToken);
+            
+            await output.FlushAsync();
+        }
+
+        public async Task<string> ConvertAsync(Workbook workbook, CancellationToken cancellationToken = default)
+        {
+            using var sw = new StringWriter();
+            await WriteAsync(workbook, sw, cancellationToken);
             return sw.ToString();
         }
 
