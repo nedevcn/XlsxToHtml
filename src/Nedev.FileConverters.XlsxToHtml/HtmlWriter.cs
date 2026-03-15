@@ -12,24 +12,84 @@ namespace Nedev.FileConverters.XlsxToHtml
         /// </summary>
         public bool EvaluateFormulas { get; set; }
 
+        /// <summary>
+        /// When true, column widths from the Excel file will be applied to the HTML table.
+        /// Default is true.
+        /// </summary>
+        public bool ApplyColumnWidths { get; set; } = true;
+
+        /// <summary>
+        /// When true, row heights from the Excel file will be applied to the HTML table.
+        /// Default is false (to allow natural row height).
+        /// </summary>
+        public bool ApplyRowHeights { get; set; } = false;
+
         public void Write(Workbook workbook, TextWriter output)
         {
             if (workbook == null) throw new ArgumentNullException(nameof(workbook));
             if (output == null) throw new ArgumentNullException(nameof(output));
 
             var sb = new StringBuilder();
-            sb.AppendLine("<html><head><meta charset=\"utf-8\"/></head><body>");
+            sb.AppendLine("<!DOCTYPE html>");
+            sb.AppendLine("<html><head><meta charset=\"utf-8\"/>");
+            sb.AppendLine("<style>");
+            sb.AppendLine("table { border-collapse: collapse; }");
+            sb.AppendLine("td { box-sizing: border-box; }");
+            sb.AppendLine("</style>");
+            sb.AppendLine("</head><body>");
 
             for (int i = 0; i < workbook.Sheets.Count; i++)
             {
                 var sheet = workbook.Sheets[i];
                 sb.AppendLine($"<h1>{Escape(sheet.Name)}</h1>");
-                sb.AppendLine("<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">");
+                
+                // Generate colgroup for column widths
+                if (ApplyColumnWidths && sheet.Columns.Count > 0)
+                {
+                    sb.AppendLine("<table cellspacing=\"0\" cellpadding=\"2\">");
+                    sb.AppendLine("<colgroup>");
+                    var maxCol = sheet.Columns.Keys.Max();
+                    for (int c = 1; c <= maxCol; c++)
+                    {
+                        if (sheet.Columns.TryGetValue(c, out var colInfo) && colInfo.Width.HasValue)
+                        {
+                            // Convert Excel width (characters) to approximate pixels
+                            // Standard: ~7 pixels per character + 10 pixels padding
+                            var widthPx = (int)(colInfo.Width.Value * 7 + 10);
+                            sb.AppendLine($"<col style=\"width:{widthPx}px;\"/>");
+                        }
+                        else
+                        {
+                            sb.AppendLine("<col/>");
+                        }
+                    }
+                    sb.AppendLine("</colgroup>");
+                }
+                else
+                {
+                    sb.AppendLine("<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">");
+                }
+                
                 foreach (var row in sheet.Rows)
                 {
-                    sb.AppendLine("<tr>");
+                    // Skip hidden rows
+                    if (row.Hidden) continue;
+                    
+                    var rowStyle = new StringBuilder();
+                    if (ApplyRowHeights && row.Height.HasValue)
+                    {
+                        rowStyle.Append($"height:{row.Height.Value}pt;");
+                    }
+                    
+                    var rowAttr = rowStyle.Length > 0 ? $" style=\"{rowStyle}\"" : string.Empty;
+                    sb.AppendLine($"<tr{rowAttr}>");
+                    
                     foreach (var cell in row.Cells)
                     {
+                        // Skip hidden columns
+                        if (sheet.Columns.TryGetValue(cell.Column, out var col) && col.Hidden)
+                            continue;
+                        
                         // skip cells that are covered by a merge and are not top-left
                         var merge = sheet.Merges.FirstOrDefault(m => m.Covers(row.Number, cell.Column));
                         if (merge != null && !merge.IsTopLeft(row.Number, cell.Column))

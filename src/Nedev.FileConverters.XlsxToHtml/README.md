@@ -62,7 +62,7 @@ dotnet test src/Nedev.FileConverters.XlsxToHtml.slnx
 ## Limitations
 
 - Formulas are not evaluated by default; set `HtmlWriter.EvaluateFormulas` to `true` for simple expressions.
-- Images/charts and complex features (merged cells, comments) are not supported yet.
+- Images/charts and comments are not supported yet.
 
 ---
 

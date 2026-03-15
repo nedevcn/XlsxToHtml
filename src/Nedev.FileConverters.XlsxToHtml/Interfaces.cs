@@ -3,6 +3,7 @@ namespace Nedev.FileConverters.XlsxToHtml
     public interface IXlsxReader
     {
         Workbook Read(string path);
+        Workbook Read(System.IO.Stream stream);
     }
 
     public interface IHtmlWriter

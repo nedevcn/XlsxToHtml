@@ -69,100 +69,340 @@ namespace Nedev.FileConverters.XlsxToHtml
             using var stream = entry.Open();
             using var reader = XmlReader.Create(stream);
 
-            // temporary lists for fonts and fills
-            var fonts = new List<(bool Bold, bool Italic, bool Underline, string? Color)>();
+            // temporary lists for fonts, fills, borders, and cellXfs alignment info
+            var fonts = new List<FontInfo>();
             var fills = new List<string?>();
+            var borders = new List<BorderInfo>();
             var numFmts = new Dictionary<int, string?>();
+            var cellXfs = new List<CellXfInfo>();
 
-            // We need two passes: collect numFmts/fonts/fills, then cellXfs
+            // First pass: collect all definitions
             while (reader.Read())
             {
                 if (reader.NodeType == XmlNodeType.Element)
                 {
-                    if (reader.Name == "numFmt")
+                    switch (reader.Name)
                     {
-                        var idAttr = reader.GetAttribute("numFmtId");
-                        var code = reader.GetAttribute("formatCode");
-                        if (int.TryParse(idAttr, out int id))
-                            numFmts[id] = code;
-                    }
-                    else if (reader.Name == "font")
-                    {
-                        // parse font element
-                        bool bold = false, italic = false, underline = false;
-                        string? color = null;
-                        var depth = reader.Depth;
-                        while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "font" && reader.Depth == depth))
-                        {
-                            if (reader.NodeType == XmlNodeType.Element)
+                        case "numFmt":
+                            ReadNumFmt(reader, numFmts);
+                            break;
+                        case "font":
+                            fonts.Add(ReadFont(reader));
+                            break;
+                        case "fill":
+                            fills.Add(ReadFill(reader));
+                            break;
+                        case "border":
+                            borders.Add(ReadBorder(reader));
+                            break;
+                        case "xf":
+                            // Only process xf elements inside cellXfs
+                            if (reader.Depth > 0)
                             {
-                                if (reader.Name == "b") bold = true;
-                                else if (reader.Name == "i") italic = true;
-                                else if (reader.Name == "u") underline = true;
-                                else if (reader.Name == "color")
-                                {
-                                    var rgb = reader.GetAttribute("rgb");
-                                    if (!string.IsNullOrEmpty(rgb) && rgb.Length == 8 && rgb.StartsWith("FF"))
-                                        color = "#" + rgb.Substring(2);
-                                }
+                                cellXfs.Add(ReadCellXf(reader));
                             }
-                        }
-
-                        fonts.Add((bold, italic, underline, color));
-                    }
-                    else if (reader.Name == "fill")
-                    {
-                        // parse fill element
-                        string? bg = null;
-                        var depth = reader.Depth;
-                        while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "fill" && reader.Depth == depth))
-                        {
-                            if (reader.NodeType == XmlNodeType.Element && reader.Name == "fgColor")
-                            {
-                                var rgb = reader.GetAttribute("rgb");
-                                if (!string.IsNullOrEmpty(rgb) && rgb.Length == 8 && rgb.StartsWith("FF"))
-                                    bg = "#" + rgb.Substring(2);
-                            }
-                        }
-                        fills.Add(bg);
-                    }
-                    else if (reader.Name == "cellXfs")
-                    {
-                        // parse xf entries sequentially
-                        int xfIndex = -1;
-                        var depth = reader.Depth;
-                        while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "cellXfs" && reader.Depth == depth))
-                        {
-                            if (reader.NodeType == XmlNodeType.Element && reader.Name == "xf")
-                            {
-                                xfIndex++;
-                                var style = new CellStyle();
-                                if (int.TryParse(reader.GetAttribute("numFmtId"), out int nfmt))
-                                {
-                                    style.NumberFormatId = nfmt;
-                                    if (numFmts.TryGetValue(nfmt, out var fmt))
-                                        style.NumberFormat = fmt;
-                                }
-                                if (int.TryParse(reader.GetAttribute("fontId"), out int fontId) && fontId >= 0 && fontId < fonts.Count)
-                                {
-                                    var f = fonts[fontId];
-                                    style.Bold = f.Bold;
-                                    style.Italic = f.Italic;
-                                    style.Underline = f.Underline;
-                                    style.FontColor = f.Color;
-                                }
-                                if (int.TryParse(reader.GetAttribute("fillId"), out int fillId) && fillId >= 0 && fillId < fills.Count)
-                                {
-                                    style.BackgroundColor = fills[fillId];
-                                }
-                                styles[xfIndex] = style;
-                            }
-                        }
+                            break;
                     }
                 }
             }
 
+            // Second pass: build CellStyle objects from cellXfs
+            for (int i = 0; i < cellXfs.Count; i++)
+            {
+                var xf = cellXfs[i];
+                var style = new CellStyle();
+
+                // Number format
+                if (xf.NumFmtId.HasValue)
+                {
+                    style.NumberFormatId = xf.NumFmtId.Value;
+                    if (numFmts.TryGetValue(xf.NumFmtId.Value, out var fmt))
+                        style.NumberFormat = fmt;
+                }
+
+                // Font
+                if (xf.FontId.HasValue && xf.FontId.Value >= 0 && xf.FontId.Value < fonts.Count)
+                {
+                    var f = fonts[xf.FontId.Value];
+                    style.Bold = f.Bold;
+                    style.Italic = f.Italic;
+                    style.Underline = f.Underline;
+                    style.Strikethrough = f.Strikethrough;
+                    style.FontSize = f.Size;
+                    style.FontName = f.Name;
+                    style.FontColor = f.Color;
+                }
+
+                // Fill
+                if (xf.FillId.HasValue && xf.FillId.Value >= 0 && xf.FillId.Value < fills.Count)
+                {
+                    style.BackgroundColor = fills[xf.FillId.Value];
+                }
+
+                // Border
+                if (xf.BorderId.HasValue && xf.BorderId.Value >= 0 && xf.BorderId.Value < borders.Count)
+                {
+                    var b = borders[xf.BorderId.Value];
+                    style.BorderLeft = b.Left;
+                    style.BorderRight = b.Right;
+                    style.BorderTop = b.Top;
+                    style.BorderBottom = b.Bottom;
+                }
+
+                // Alignment
+                if (xf.ApplyAlignment && xf.Alignment != null)
+                {
+                    style.HorizontalAlign = xf.Alignment.Horizontal;
+                    style.VerticalAlign = xf.Alignment.Vertical;
+                    style.WrapText = xf.Alignment.WrapText;
+                }
+
+                styles[i] = style;
+            }
+
             return styles;
+        }
+
+        private static void ReadNumFmt(XmlReader reader, Dictionary<int, string?> numFmts)
+        {
+            var idAttr = reader.GetAttribute("numFmtId");
+            var code = reader.GetAttribute("formatCode");
+            if (int.TryParse(idAttr, out int id))
+                numFmts[id] = code;
+        }
+
+        private class FontInfo
+        {
+            public bool Bold { get; set; }
+            public bool Italic { get; set; }
+            public bool Underline { get; set; }
+            public bool Strikethrough { get; set; }
+            public double? Size { get; set; }
+            public string? Name { get; set; }
+            public string? Color { get; set; }
+        }
+
+        private static FontInfo ReadFont(XmlReader reader)
+        {
+            var font = new FontInfo();
+            var depth = reader.Depth;
+            
+            while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "font" && reader.Depth == depth))
+            {
+                if (reader.NodeType == XmlNodeType.Element)
+                {
+                    switch (reader.Name)
+                    {
+                        case "b":
+                            font.Bold = true;
+                            break;
+                        case "i":
+                            font.Italic = true;
+                            break;
+                        case "u":
+                            font.Underline = true;
+                            break;
+                        case "strike":
+                            font.Strikethrough = true;
+                            break;
+                        case "sz":
+                            if (double.TryParse(reader.GetAttribute("val"), out double size))
+                                font.Size = size;
+                            break;
+                        case "name":
+                            font.Name = reader.GetAttribute("val");
+                            break;
+                        case "color":
+                            font.Color = ReadColor(reader);
+                            break;
+                    }
+                }
+            }
+            
+            return font;
+        }
+
+        private static string? ReadFill(XmlReader reader)
+        {
+            string? bg = null;
+            var depth = reader.Depth;
+            
+            while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "fill" && reader.Depth == depth))
+            {
+                if (reader.NodeType == XmlNodeType.Element && reader.Name == "fgColor")
+                {
+                    bg = ReadColor(reader);
+                }
+            }
+            
+            return bg;
+        }
+
+        private class BorderInfo
+        {
+            public BorderStyle? Left { get; set; }
+            public BorderStyle? Right { get; set; }
+            public BorderStyle? Top { get; set; }
+            public BorderStyle? Bottom { get; set; }
+        }
+
+        private static BorderInfo ReadBorder(XmlReader reader)
+        {
+            var border = new BorderInfo();
+            var depth = reader.Depth;
+            
+            while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "border" && reader.Depth == depth))
+            {
+                if (reader.NodeType == XmlNodeType.Element)
+                {
+                    BorderStyle? bs = null;
+                    var style = reader.GetAttribute("style");
+                    
+                    // Read color if present
+                    string? color = null;
+                    var borderDepth = reader.Depth;
+                    while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Depth == borderDepth))
+                    {
+                        if (reader.NodeType == XmlNodeType.Element && reader.Name == "color")
+                        {
+                            color = ReadColor(reader);
+                        }
+                    }
+                    
+                    if (!string.IsNullOrEmpty(style) && style != "none")
+                    {
+                        bs = new BorderStyle
+                        {
+                            Style = style,
+                            Color = color,
+                            Width = style.ToLowerInvariant() switch
+                            {
+                                "thin" => 1,
+                                "medium" => 2,
+                                "thick" => 3,
+                                _ => 1
+                            }
+                        };
+                    }
+                    
+                    switch (reader.Name)
+                    {
+                        case "left": border.Left = bs; break;
+                        case "right": border.Right = bs; break;
+                        case "top": border.Top = bs; break;
+                        case "bottom": border.Bottom = bs; break;
+                    }
+                }
+            }
+            
+            return border;
+        }
+
+        private class AlignmentInfo
+        {
+            public HorizontalAlignment Horizontal { get; set; } = HorizontalAlignment.Default;
+            public VerticalAlignment Vertical { get; set; } = VerticalAlignment.Default;
+            public bool WrapText { get; set; }
+        }
+
+        private class CellXfInfo
+        {
+            public int? NumFmtId { get; set; }
+            public int? FontId { get; set; }
+            public int? FillId { get; set; }
+            public int? BorderId { get; set; }
+            public bool ApplyAlignment { get; set; }
+            public AlignmentInfo? Alignment { get; set; }
+        }
+
+        private static CellXfInfo ReadCellXf(XmlReader reader)
+        {
+            var xf = new CellXfInfo
+            {
+                NumFmtId = ParseInt(reader.GetAttribute("numFmtId")),
+                FontId = ParseInt(reader.GetAttribute("fontId")),
+                FillId = ParseInt(reader.GetAttribute("fillId")),
+                BorderId = ParseInt(reader.GetAttribute("borderId"))
+            };
+
+            // Check if alignment is applied
+            if (bool.TryParse(reader.GetAttribute("applyAlignment"), out bool applyAlign))
+                xf.ApplyAlignment = applyAlign;
+
+            // Read alignment element if present
+            if (!reader.IsEmptyElement)
+            {
+                var depth = reader.Depth;
+                while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "xf" && reader.Depth == depth))
+                {
+                    if (reader.NodeType == XmlNodeType.Element && reader.Name == "alignment")
+                    {
+                        xf.Alignment = ReadAlignment(reader);
+                    }
+                }
+            }
+
+            return xf;
+        }
+
+        private static AlignmentInfo ReadAlignment(XmlReader reader)
+        {
+            var align = new AlignmentInfo();
+            
+            var horizontal = reader.GetAttribute("horizontal");
+            align.Horizontal = horizontal?.ToLowerInvariant() switch
+            {
+                "left" => HorizontalAlignment.Left,
+                "center" => HorizontalAlignment.Center,
+                "right" => HorizontalAlignment.Right,
+                "justify" => HorizontalAlignment.Justify,
+                _ => HorizontalAlignment.Default
+            };
+            
+            var vertical = reader.GetAttribute("vertical");
+            align.Vertical = vertical?.ToLowerInvariant() switch
+            {
+                "top" => VerticalAlignment.Top,
+                "center" => VerticalAlignment.Middle,
+                "bottom" => VerticalAlignment.Bottom,
+                _ => VerticalAlignment.Default
+            };
+            
+            if (bool.TryParse(reader.GetAttribute("wrapText"), out bool wrap))
+                align.WrapText = wrap;
+            
+            return align;
+        }
+
+        private static string? ReadColor(XmlReader reader)
+        {
+            var rgb = reader.GetAttribute("rgb");
+            if (!string.IsNullOrEmpty(rgb) && rgb.Length == 8 && rgb.StartsWith("FF"))
+                return "#" + rgb.Substring(2);
+            
+            // Handle indexed colors and theme colors (simplified)
+            var indexed = reader.GetAttribute("indexed");
+            if (!string.IsNullOrEmpty(indexed))
+            {
+                // Could look up in indexed color table
+                return null;
+            }
+            
+            return null;
+        }
+
+        private static int? ParseInt(string? value)
+        {
+            if (int.TryParse(value, out int result))
+                return result;
+            return null;
+        }
+
+        private static double? ParseDouble(string? value)
+        {
+            if (double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double result))
+                return result;
+            return null;
         }
 
         private static List<string> ReadSheetNames(ZipArchive archive)
@@ -203,7 +443,35 @@ namespace Nedev.FileConverters.XlsxToHtml
             {
                 if (reader.NodeType == XmlNodeType.Element)
                 {
-                    if (reader.Name == "mergeCells")
+                    if (reader.Name == "cols")
+                    {
+                        // process column definitions
+                        var depth = reader.Depth;
+                        while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Name == "cols" && reader.Depth == depth))
+                        {
+                            if (reader.NodeType == XmlNodeType.Element && reader.Name == "col")
+                            {
+                                var min = ParseInt(reader.GetAttribute("min"));
+                                var max = ParseInt(reader.GetAttribute("max"));
+                                var width = ParseDouble(reader.GetAttribute("width"));
+                                var hidden = reader.GetAttribute("hidden") == "1";
+                                
+                                if (min.HasValue && max.HasValue)
+                                {
+                                    for (int col = min.Value; col <= max.Value; col++)
+                                    {
+                                        ws.Columns[col] = new ColumnInfo
+                                        {
+                                            Index = col,
+                                            Width = width,
+                                            Hidden = hidden
+                                        };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (reader.Name == "mergeCells")
                     {
                         // process mergeCell entries inside this container
                         var depth = reader.Depth;
@@ -236,6 +504,10 @@ namespace Nedev.FileConverters.XlsxToHtml
                         currentRow = new Row();
                         if (int.TryParse(reader.GetAttribute("r"), out int r))
                             currentRow.Number = r;
+                        if (double.TryParse(reader.GetAttribute("ht"), out double ht))
+                            currentRow.Height = ht;
+                        if (reader.GetAttribute("hidden") == "1")
+                            currentRow.Hidden = true;
                         ws.Rows.Add(currentRow);
                     }
                     else if (reader.Name == "c" && currentRow != null)
